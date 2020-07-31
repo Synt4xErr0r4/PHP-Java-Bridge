@@ -576,7 +576,9 @@ class Packet {
      * internal use only
      */
     public function raw() {
-        return$this->data;
+        $data=$this->data;
+        $this->data='';
+        return$data;
     }
 
     /**

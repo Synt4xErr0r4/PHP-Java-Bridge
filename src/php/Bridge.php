@@ -53,19 +53,39 @@ function notice(string $msg) {
         echo"<b>Notice:</b> $msg<br/>";
 }
 
+/**
+ * The connection between PHP and Java
+ * 
+ * Data can be transmitted via the Packet class
+ * 
+ * @see phpjava\Packet
+ */
 class Bridge {
 
     private$sock,$hostname,$port,$useAES,$passwd,$maxPacketSize,$method;
 
+    /**
+     * Instantiates a new PHP-Java-Bridge
+     * 
+     * @param method the method to be used: either TCP (BRIGE_TCP) or UDP (BRIDGE_UDP)
+     * @param hostname the address (IPv4 or domain) to connect to the server
+     * @param port the port of the server. default 8998
+     * @param useAES whether or not the data should be AES-256-CBC encrypted. default false
+     * @param passwd only required if useAES is true. Hashed with SHA3-256. default null
+     * @param maxPacketSize the maximum size of a Packet. default 65535
+     */
     public function __construct(int $method,string $hostname,int $port=8998,bool $useAES=false,?string $passwd=null,int $maxPacketSize=65535) {
         $this->hostname=$hostname;
 
         if($port<0||$port>65535)
             throw new Exception("Port out of range: $port: [0;65,535]");
 
+        if(is_null($passwd)&&$useAES)
+            throw new Exception("AES required a password, got null instead");
+
         $this->port=$port;
         $this->useAES=$useAES;
-        $this->passwd=$passwd;
+        $this->passwd=is_null($passwd)?null:hash('sha3-256',$passwd);
 
         if($maxPacketSize>0x7fffffff)
         throw new Exception("max. Packet size out of range: $maxPacketSize [6;2,147,483,647]");
@@ -76,6 +96,10 @@ class Bridge {
             throw new Exception("Unrecognized method: $method");
     }
 
+    /**
+     * TCP: establishes connection to the server
+     * UDP: initialized socket (doesn't throw Exception if the server is not reachable)
+     */
     public function connect() {
         if(!is_null($this->sock))
             throw new ConnectionAlreadyEstablishedException("Already connected");
@@ -165,7 +189,12 @@ class Bridge {
         return$response;
     }
 
-    public function encrypt(string $plainText):string {
+    /**
+     * @param plainText the text to be encrypted
+     * 
+     * @return string the AES-256-CBC encrypted string. The password is hashed with SHA3-256
+     */
+    private function encrypt(string $plainText):string {
         if(!$this->useAES)
             return base64_encode($plainText);
 
@@ -176,11 +205,14 @@ class Bridge {
             throw new Exception("Couldn't generate IV: ".$err['message']." [#".$err['type']."]");
         }
 
-        $passwd=hash('sha3-256',$this->passwd);
-
-        return base64_encode($iv.openssl_encrypt($plainText,'AES-256-CBC',$passwd,OPENSSL_RAW_DATA,$iv));
+        return base64_encode($iv.openssl_encrypt($plainText,'AES-256-CBC',$this->passwd,OPENSSL_RAW_DATA,$iv));
     }
-    public function decrypt(string $cipherText):string {
+    /**
+     * @param cipherText the encrypted text
+     * 
+     * @return string the decrypted plain text
+     */
+    private function decrypt(string $cipherText):string {
         $cipherText=base64_decode($cipherText);
 
         if(!$this->useAES)
@@ -188,10 +220,8 @@ class Bridge {
         
         $iv=substr($cipherText,0,16);
         $cipherText=substr($cipherText,16);
-        
-        $passwd=hash('sha3-256',$this->passwd);
 
-        return openssl_decrypt($cipherText,'AES-256-CBC',$passwd,OPENSSL_RAW_DATA,$iv);
+        return openssl_decrypt($cipherText,'AES-256-CBC',$this->passwd,OPENSSL_RAW_DATA,$iv);
     }
 
 }
