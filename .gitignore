@@ -30,6 +30,11 @@ hs_err_pid*
 
 ### Eclipse Files
 
+.classpath
+.project
+/bin/
+.settings/
+
 ### Test Files
 
 test/
