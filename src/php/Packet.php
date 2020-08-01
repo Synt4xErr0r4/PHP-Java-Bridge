@@ -142,7 +142,7 @@ define('DATA_DOUBLE',9);
  * each character uses 1 to 3 bytes of space
  * additionally, 2 bytes are used for the length of the string
  * 
- * Space required (in bytes): <varying>
+ * Space required (in bytes): 2+n (min) to 2+3*n (max)
  */
 define('DATA_STRING_UTF8',10);
 /**
@@ -236,14 +236,15 @@ class Packet {
      */
     private$dataTypes;
 
-    private$data,$pid;
+    private$data,$pid,$flag;
 
     /**
      * Instantiates a new Packet
      * 
      * @param pid the Packet-ID. must be in range [0;255]
+     * @param flag either 'w' (write) or 'r' (read). If 'w' is set, you cannot read from the Packet and vice versa.
      */
-    public function __construct(int $pid) {
+    public function __construct(int $pid,string $flag='w') {
         $this->dataTypes=[
             DATA_BOOL=>          ['bool',  'c',false,1,fn($x)=>is_numeric($x)||is_bool($x),                                                                              fn($x)=>intval($x)!=0?1:0],
             DATA_BYTE=>          ['int8',  'c',false,1,fn($x)=>is_numeric($x)&&-128<=$x&&$x<=127,                                                                        'intval'],
@@ -261,6 +262,7 @@ class Packet {
             warn("PacketIDs cannot be lower than 0 or greater than 255: $pid");
 
         $this->pid=$pid&0xFF; // make sure it's byte (int8)
+        $this->flag=strlen($flag)==0?'w':$flag[0];
     }
 
     /**
@@ -290,6 +292,9 @@ class Packet {
      * @param writeType internal use only
      */
     public function write(int $data_type,$data,bool $writeType=true) {
+        if($this->flag!='w')
+            throw new Exception('Cannot write to Packet: Packet is read-only');
+
         if(isset($this->dataTypes[$data_type])) {
             $args=$this->dataTypes[$data_type];
 
@@ -441,8 +446,11 @@ class Packet {
      * @return mixed the read data 
      */
     public function read(int $data_type,bool $readType=true) {
+        if($this->flag!='r')
+            throw new Exception('Cannot read from Packet: Packet is write-only');
+
         if($readType) {
-            $type=$this->read0('C',1);
+            $type=$this->read(DATA_UNSIGNED_BYTE,false);
 
             if($type!==$data_type)
                 throw new InvalidTypeException('Types don\'t match: '.(is_null($type)?'NULL':$type)." != $data_type");
@@ -469,7 +477,7 @@ class Packet {
             $previous=0;
             $str='';
 
-            $len=$this->read0('n',2,false);
+            $len=$this->read(DATA_UNSIGNED_SHORT,false);
 
             for($i=0;strlen($str)<$len;++$i) {
 
@@ -481,7 +489,7 @@ class Packet {
                         break;
                 }
 
-                $current=$this->read0('C',1);
+                $current=$this->read(DATA_UNSIGNED_BYTE,false);
 
                 $modPrev=$i%7;
                 $mod=$modPrev+1;
