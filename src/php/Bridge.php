@@ -31,9 +31,11 @@
 namespace phpjava;
 
 use Exception;
+use PhpAes\Aes;
 
 require_once 'Packet.php';
 require_once 'exceptions.php';
+require_once 'lib/Aes.php';
 
 define('BRIDGE_TCP',0);
 define('BRIDGE_UDP',1);
@@ -85,10 +87,10 @@ class Bridge {
 
         $this->port=$port;
         $this->useAES=$useAES;
-        $this->passwd=is_null($passwd)?null:hash('sha3-256',$passwd);
+        $this->passwd=is_null($passwd)?null:hash('sha3-256',$passwd,true);
 
         if($maxPacketSize>0x7fffffff)
-        throw new Exception("max. Packet size out of range: $maxPacketSize [6;2,147,483,647]");
+            throw new Exception("max. Packet size out of range: $maxPacketSize [6;2,147,483,647]");
 
         $this->maxPacketSize=$maxPacketSize;
 
@@ -205,7 +207,9 @@ class Bridge {
             throw new Exception("Couldn't generate IV: ".$err['message']." [#".$err['type']."]");
         }
 
-        return base64_encode($iv.openssl_encrypt($plainText,'AES-256-CBC',$this->passwd,OPENSSL_RAW_DATA,$iv));
+        $aes=new Aes($this->passwd,'CBC',$iv);
+        
+        return base64_encode($iv.$aes->encrypt($plainText));
     }
     /**
      * @param cipherText the encrypted text
@@ -221,7 +225,9 @@ class Bridge {
         $iv=substr($cipherText,0,16);
         $cipherText=substr($cipherText,16);
 
-        return openssl_decrypt($cipherText,'AES-256-CBC',$this->passwd,OPENSSL_RAW_DATA,$iv);
+        $aes=new Aes($this->passwd,'CBC',$iv);
+
+        return$aes->decrypt($cipherText);
     }
 
 }
