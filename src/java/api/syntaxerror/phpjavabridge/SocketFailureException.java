@@ -35,7 +35,7 @@ package api.syntaxerror.phpjavabridge;
  * Wiki: <a
  * href=https://github.com/Synt4xErr0r4/PHP-Java-Bridge/wiki>https://github.com/Synt4xErr0r4/PHP-Java-Bridge/wiki</a><br>
  * JavaDocs (for /src/java): <a
- * href=https://github.com/Synt4xErr0r4/PHP-Java-Bridge/blob/master/javadoc/>https://github.com/Synt4xErr0r4/PHP-Java-Bridge/blob/master/javadoc/</a><br>
+ * href=https://github.com/Synt4xErr0r4/PHP-Java-Bridge/blob/master/javadoc/index.html>https://github.com/Synt4xErr0r4/PHP-Java-Bridge/blob/master/javadoc/index.html</a><br>
  *
  * <hr>
  * 
@@ -46,14 +46,12 @@ package api.syntaxerror.phpjavabridge;
  */
 @SuppressWarnings("serial")
 public class SocketFailureException extends RuntimeException {
-	
+
 	/**
 	 * Instantiates a new SocketFailureException.
-	 *
-	 * @param cause the cause
 	 */
-	public SocketFailureException(Throwable cause) {
-		super(cause);
+	public SocketFailureException() {
+		super();
 	}
 	
 	/**
@@ -68,6 +66,15 @@ public class SocketFailureException extends RuntimeException {
 	/**
 	 * Instantiates a new SocketFailureException.
 	 *
+	 * @param cause the cause
+	 */
+	public SocketFailureException(Throwable cause) {
+		super(cause);
+	}
+	
+	/**
+	 * Instantiates a new SocketFailureException.
+	 *
 	 * @param message the message
 	 * @param cause the cause
 	 */
@@ -75,11 +82,5 @@ public class SocketFailureException extends RuntimeException {
 		super(message,cause);
 	}
 	
-	/**
-	 * Instantiates a new SocketFailureException.
-	 */
-	public SocketFailureException() {
-		super();
-	}
 	
 }

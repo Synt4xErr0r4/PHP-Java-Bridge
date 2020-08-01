@@ -1,4 +1,33 @@
 <?php
+/**
+ * PHP-Java-Bridge provides a TCP- or UDP-based connection between PHP (Client) and Java (Server)
+ * 
+ * licensed under the Apache License 2.0:
+ * 
+ * Permissions:
+ *  - Commercial use
+ *  - Modification
+ *  - Distribution
+ *  - Patent use
+ *  - Private use
+ * 
+ * Limitiations:
+ *  - Trademark use
+ *  - Liability
+ *  - Warranty
+ * 
+ * Conditions:
+ *  - License and copyright notice
+ *  - State changes
+ * 
+ * @link License: https://github.com/Synt4xErr0r4/PHP-Java-Bridge/blob/master/LICENSE
+ * @link GitHub Repository: https://github.com/Synt4xErr0r4/PHP-Java-Bridge/
+ * @link Wiki: https://github.com/Synt4xErr0r4/PHP-Java-Bridge/wiki
+ * @link JavaDocs (for /src/java): https://github.com/Synt4xErr0r4/PHP-Java-Bridge/blob/master/javadoc/index.html
+ * 
+ * @version 1.0
+ * @author SyntaxError404, 2020
+ */
 
 use phpjava\Bridge;
 use phpjava\Packet;

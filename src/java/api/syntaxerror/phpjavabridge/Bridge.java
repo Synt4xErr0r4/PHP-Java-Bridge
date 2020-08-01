@@ -44,7 +44,7 @@ import javax.crypto.spec.SecretKeySpec;
  * License: <a href=https://github.com/Synt4xErr0r4/PHP-Java-Bridge/blob/master/LICENSE>https://github.com/Synt4xErr0r4/PHP-Java-Bridge/blob/master/LICENSE</a><br>
  * GitHub Repository: <a href=https://github.com/Synt4xErr0r4/PHP-Java-Bridge/>https://github.com/Synt4xErr0r4/PHP-Java-Bridge/</a><br>
  * Wiki: <a href=https://github.com/Synt4xErr0r4/PHP-Java-Bridge/wiki>https://github.com/Synt4xErr0r4/PHP-Java-Bridge/wiki</a><br>
- * JavaDocs (for /src/java): <a href=https://github.com/Synt4xErr0r4/PHP-Java-Bridge/blob/master/javadoc/>https://github.com/Synt4xErr0r4/PHP-Java-Bridge/blob/master/javadoc/</a><br>
+ * JavaDocs (for /src/java): <a href=https://github.com/Synt4xErr0r4/PHP-Java-Bridge/blob/master/javadoc/index.html>https://github.com/Synt4xErr0r4/PHP-Java-Bridge/blob/master/javadoc/index.html</a><br>
  * 
  * @version 1.0
  * @author SyntaxError404, 2020
@@ -58,8 +58,8 @@ public abstract class Bridge {
 	protected Map<Integer,PacketHandler>handlers;
 	protected UncaughtExceptionHandler exceptionHandler;
 	
-	/**@see BridgeImpl.TCP#TCP(int, boolean, String, int)
-	 * @see BridgeImpl.UDP#UDP(int, boolean, String, int)
+	/**@see {@link BridgeImpl.TCP#TCP(int, boolean, String, int)}
+	 * @see {@link BridgeImpl.UDP#UDP(int, boolean, String, int)}
 	 */
 	Bridge(int port,boolean useAES,String password,int maxPacketLength) {
 		handlers=new HashMap<>();
@@ -87,7 +87,6 @@ public abstract class Bridge {
 		this.maxPacketLength=maxPacketLength;
 		
 		thread=new Thread(()->{});
-		exceptionHandler=(t,e)->{};
 	}
 	
 	public int getPort() {
@@ -151,6 +150,10 @@ public abstract class Bridge {
 	 * internal use only
 	 * 
 	 * AES-256-CBC encryption with SHA3-256 hashed password
+	 * 
+	 * @param plainText the raw data
+	 * 
+	 * @return the encrypted data
 	 */
 	protected final byte[]encrypt(byte[]plainText) {
 		if(!useAES)
@@ -177,6 +180,10 @@ public abstract class Bridge {
 	 * internal use only
 	 * 
 	 * AES-256-CBC decryption with SHA3-256 hashed password
+	 * 
+	 * @param cipherText the encrypted data
+	 * 
+	 * @return the decrypted plain text
 	 */
 	protected final byte[]decrypt(byte[]cipherText) {
 		cipherText=Base64.getDecoder().decode(cipherText);
@@ -199,9 +206,10 @@ public abstract class Bridge {
 	// STATIC METHODS
 
 	/**
-	 * Creates a new {@link BridgeImpl.TCP TCP-Bridge}
+	 * Creates a new {@link BridgeImpl.TCP TCP-Bridge}<br><br>
 	 * 
-	 * @see {@link #newTCP(int, boolean, String, int) Bridge#newTCP}(8998, false, null, 65535) 
+	 * see {@link Bridge#Bridge(int, boolean, String, int)}<br>
+	 * see {@link BridgeImpl.TCP#TCP(int, boolean, String, int)}
 	 * 
 	 * @return TCP-based {@link Bridge}
 	 */
@@ -209,12 +217,12 @@ public abstract class Bridge {
 		return newTCP(8998,false,null,65535);
 	}
 	/**
-	 * Creates a new {@link BridgeImpl.TCP TCP-Bridge}
+	 * Creates a new {@link BridgeImpl.TCP TCP-Bridge}<br><br>
+	 * 
+	 * see {@link Bridge#Bridge(int, boolean, String, int)}<br>
+	 * see {@link BridgeImpl.TCP#TCP(int, boolean, String, int)}
 	 * 
 	 * @param port the port to be used
-	 * 
-	 * @see Bridge#Bridge(int, boolean, String, int)
-	 * @see BridgeImpl.TCP#TCP(int, boolean, String, int)
 	 * 
 	 * @return TCP-based {@link Bridge} 
 	 */
@@ -222,13 +230,13 @@ public abstract class Bridge {
 		return newTCP(port,false,null,65535);
 	}
 	/**
-	 * Creates a new {@link BridgeImpl.TCP TCP-Bridge}
+	 * Creates a new {@link BridgeImpl.TCP TCP-Bridge}<br><br>
+	 * 
+	 * see {@link Bridge#Bridge(int, boolean, String, int)}<br>
+	 * see {@link BridgeImpl.TCP#TCP(int, boolean, String, int)}
 	 * 
 	 * @param port the port to be used
 	 * @param maxPacketLength the max. length of a single {@link Packet}
-	 * 
-	 * @see Bridge#Bridge(int, boolean, String, int)
-	 * @see BridgeImpl.TCP#TCP(int, boolean, String, int)
 	 * 
 	 * @return TCP-based {@link Bridge}
 	 */
@@ -236,14 +244,14 @@ public abstract class Bridge {
 		return newTCP(port,false,null,maxPacketLength);
 	}
 	/**
-	 * Creates a new {@link BridgeImpl.TCP TCP-Bridge}
+	 * Creates a new {@link BridgeImpl.TCP TCP-Bridge}<br><br>
+	 * 
+	 * see {@link Bridge#Bridge(int, boolean, String, int)}<br>
+	 * see {@link BridgeImpl.TCP#TCP(int, boolean, String, int)}
 	 * 
 	 * @param port the port to be used
 	 * @param useAES whether or not AES-256-CBC should be used. requires {@code password}
 	 * @param password the password to be used. Required by AES
-	 * 
-	 * @see Bridge#Bridge(int, boolean, String, int)
-	 * @see BridgeImpl.TCP#TCP(int, boolean, String, int)
 	 * 
 	 * @return TCP-based {@link Bridge}
 	 */
@@ -251,15 +259,15 @@ public abstract class Bridge {
 		return newTCP(port,useAES,password,65535);
 	}
 	/**
-	 * Creates a new {@link BridgeImpl.TCP TCP-Bridge}
+	 * Creates a new {@link BridgeImpl.TCP TCP-Bridge}<br><br>
+	 * 
+	 * see {@link Bridge#Bridge(int, boolean, String, int)}<br>
+	 * see {@link BridgeImpl.TCP#TCP(int, boolean, String, int)}
 	 * 
 	 * @param port the port to be used
 	 * @param useAES whether or not AES-256-CBC should be used. requires {@code password}
 	 * @param password the password to be used. Required by AES
 	 * @param maxPacketLength the max. length of a single {@link Packet}
-	 * 
-	 * @see Bridge#Bridge(int, boolean, String, int)
-	 * @see BridgeImpl.TCP#TCP(int, boolean, String, int)
 	 * 
 	 * @return TCP-based {@link Bridge}
 	 */
@@ -268,9 +276,10 @@ public abstract class Bridge {
 	}
 
 	/**
-	 * Creates a new {@link BridgeImpl.UDP UDP-Bridge}
+	 * Creates a new {@link BridgeImpl.UDP UDP-Bridge}<br><br>
 	 * 
-	 * @see {@link #newUDP(int, boolean, String, int) Bridge#newUDP}(8998, false, null, 65535) 
+	 * see {@link Bridge#Bridge(int, boolean, String, int)}<br>
+	 * see {@link BridgeImpl.UDP#UDP(int, boolean, String, int)}
 	 * 
 	 * @return UDP-based {@link Bridge}
 	 */
@@ -278,12 +287,12 @@ public abstract class Bridge {
 		return newUDP(8998,false,null,65535);
 	}
 	/**
-	 * Creates a new {@link BridgeImpl.UDP UDP-Bridge}
+	 * Creates a new {@link BridgeImpl.UDP UDP-Bridge}<br><br>
+	 * 
+	 * see {@link Bridge#Bridge(int, boolean, String, int)}<br>
+	 * see {@link BridgeImpl.UDP#UDP(int, boolean, String, int)}
 	 * 
 	 * @param port the port to be used
-	 * 
-	 * @see Bridge#Bridge(int, boolean, String, int)
-	 * @see BridgeImpl.UDP#UDP(int, boolean, String, int)
 	 * 
 	 * @return UDP-based {@link Bridge} 
 	 */
@@ -291,13 +300,13 @@ public abstract class Bridge {
 		return newUDP(port,false,null,65535);
 	}
 	/**
-	 * Creates a new {@link BridgeImpl.UDP UDP-Bridge}
+	 * Creates a new {@link BridgeImpl.UDP UDP-Bridge}<br><br>
+	 * 
+	 * see {@link Bridge#Bridge(int, boolean, String, int)}<br>
+	 * see {@link BridgeImpl.UDP#UDP(int, boolean, String, int)}
 	 * 
 	 * @param port the port to be used
 	 * @param maxPacketLength the max. length of a single {@link Packet}
-	 * 
-	 * @see Bridge#Bridge(int, boolean, String, int)
-	 * @see BridgeImpl.UDP#UDP(int, boolean, String, int)
 	 * 
 	 * @return UDP-based {@link Bridge}
 	 */
@@ -305,14 +314,14 @@ public abstract class Bridge {
 		return newUDP(port,false,null,maxPacketLength);
 	}
 	/**
-	 * Creates a new {@link BridgeImpl.UDP UDP-Bridge}
+	 * Creates a new {@link BridgeImpl.UDP UDP-Bridge}<br><br>
+	 * 
+	 * see {@link Bridge#Bridge(int, boolean, String, int)}<br>
+	 * see {@link BridgeImpl.UDP#UDP(int, boolean, String, int)}
 	 * 
 	 * @param port the port to be used
 	 * @param useAES whether or not AES-256-CBC should be used. requires {@code password}
 	 * @param password the password to be used. Required by AES
-	 * 
-	 * @see Bridge#Bridge(int, boolean, String, int)
-	 * @see BridgeImpl.UDP#UDP(int, boolean, String, int)
 	 * 
 	 * @return UDP-based {@link Bridge}
 	 */
@@ -320,15 +329,15 @@ public abstract class Bridge {
 		return newUDP(port,useAES,password,65535);
 	}
 	/**
-	 * Creates a new {@link BridgeImpl.UDP UDP-Bridge}
+	 * Creates a new {@link BridgeImpl.UDP UDP-Bridge}<br><br>
+	 * 
+	 * see {@link Bridge#Bridge(int, boolean, String, int)}<br>
+	 * see {@link BridgeImpl.UDP#UDP(int, boolean, String, int)}
 	 * 
 	 * @param port the port to be used
 	 * @param useAES whether or not AES-256-CBC should be used. requires {@code password}
 	 * @param password the password to be used. Required by AES
 	 * @param maxPacketLength the max. length of a single {@link Packet}
-	 * 
-	 * @see Bridge#Bridge(int, boolean, String, int)
-	 * @see BridgeImpl.UDP#UDP(int, boolean, String, int)
 	 * 
 	 * @return UDP-based {@link Bridge}
 	 */

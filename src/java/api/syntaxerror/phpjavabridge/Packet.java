@@ -1,5 +1,8 @@
 package api.syntaxerror.phpjavabridge;
 
+import java.io.Closeable;
+import java.io.IOException;
+
 /**
  * PHP-Java-Bridge provides a TCP- or UDP-based connection between PHP (Client) and Java (Server)<br>
  * <br>
@@ -30,31 +33,132 @@ package api.syntaxerror.phpjavabridge;
  * License: <a href=https://github.com/Synt4xErr0r4/PHP-Java-Bridge/blob/master/LICENSE>https://github.com/Synt4xErr0r4/PHP-Java-Bridge/blob/master/LICENSE</a><br>
  * GitHub Repository: <a href=https://github.com/Synt4xErr0r4/PHP-Java-Bridge/>https://github.com/Synt4xErr0r4/PHP-Java-Bridge/</a><br>
  * Wiki: <a href=https://github.com/Synt4xErr0r4/PHP-Java-Bridge/wiki>https://github.com/Synt4xErr0r4/PHP-Java-Bridge/wiki</a><br>
- * JavaDocs (for /src/java): <a href=https://github.com/Synt4xErr0r4/PHP-Java-Bridge/blob/master/javadoc/>https://github.com/Synt4xErr0r4/PHP-Java-Bridge/blob/master/javadoc/</a><br>
+ * JavaDocs (for /src/java): <a href=https://github.com/Synt4xErr0r4/PHP-Java-Bridge/blob/master/javadoc/index.html>https://github.com/Synt4xErr0r4/PHP-Java-Bridge/blob/master/javadoc/index.html</a><br>
+ * 
+ * <hr>
+ * 
+ * A {@code Packet} is used to send and receive data.<br>
+ * Currently, there are 14 differen data types supported:
+ * <table border=1 style="border-collapse:collapse;text-align:center">
+ * 	<caption>Available Data Types</caption>
+ * 	<thead style="font-weight:bold">
+ * 		<tr>
+ * 			<td>ID</td>
+ * 			<td>Name</td>
+ * 			<td>Read method</td>
+ * 			<td>Write method</td>
+ * 		</tr>
+ * 	</thead>
+ * 	<tbody>
+ * 		<tr>
+ * 			<td>#0</td>
+ * 			<td>boolean</td>
+ * 			<td>{@link #readBoolean()}</td>
+ * 			<td>{@link #writeBoolean(boolean)}</td>
+ * 		</tr>
+ * 			<tr>
+ * 			<td>#1</td>
+ * 			<td>byte</td>
+ * 			<td>{@link #readByte()}</td>
+ * 			<td>{@link #writeByte(byte)}</td>
+ * 		</tr>
+ * 			<tr>
+ * 			<td>#2</td>
+ * 			<td>unsigned byte</td>
+ * 			<td>{@link #readUnsignedByte()}</td>
+ * 			<td>{@link #writeUnsignedByte(int)}</td>
+ * 		</tr>
+ * 			<tr>
+ * 			<td>#3</td>
+ * 			<td>short</td>
+ * 			<td>{@link #readShort()}</td>
+ * 			<td>{@link #writeShort(short)}</td>
+ * 		</tr>
+ * 			<tr>
+ * 			<td>#4</td>
+ * 			<td>unsigned short</td>
+ * 			<td>{@link #readUnsignedShort()}</td>
+ * 			<td>{@link #writeUnsignedShort(int)}</td>
+ * 		</tr>
+ * 			<tr>
+ * 			<td>#5</td>
+ * 			<td>int</td>
+ * 			<td>{@link #readInt()}</td>
+ * 			<td>{@link #writeInt(int)}</td>
+ * 		</tr>
+ * 			<tr>
+ * 			<td>#6</td>
+ * 			<td>unsigned int</td>
+ * 			<td>{@link #readUnsignedInt()}</td>
+ * 			<td>{@link #writeUnsignedInt(long)}</td>
+ * 		</tr>
+ * 			<tr>
+ * 			<td>#7</td>
+ * 			<td>long</td>
+ * 			<td>{@link #readLong()}</td>
+ * 			<td>{@link #writeLong(long)}</td>
+ * 		</tr>
+ * 			<tr>
+ * 			<td>#8</td>
+ * 			<td>float</td>
+ * 			<td>{@link #readFloat()}</td>
+ * 			<td>{@link #writeFloat(float)}</td>
+ * 		</tr>
+ * 			<tr>
+ * 			<td>#9</td>
+ * 			<td>double</td>
+ * 			<td>{@link #readDouble()}</td>
+ * 			<td>{@link #writeDouble(double)}</td>
+ * 		</tr>
+ * 			<tr>
+ * 			<td>#10</td>
+ * 			<td>String (UTF-8)</td>
+ * 			<td>{@link #readStringUTF8()}</td>
+ * 			<td>{@link #writeStringUTF8(String)}</td>
+ * 		</tr>
+ * 			<tr>
+ * 			<td>#11</td>
+ * 			<td>String (ASCII, optimized)</td>
+ * 			<td>{@link #readStringASCII()}</td>
+ * 			<td>{@link #writeStringASCII(String)}</td>
+ * 		</tr>
+ * 			<tr>
+ * 			<td>#12</td>
+ * 			<td>String (C)</td>
+ * 			<td>{@link #readStringC()}</td>
+ * 			<td>{@link #writeStringC(String)}</td>
+ * 		</tr>
+ * 			<tr>
+ * 			<td>#13</td>
+ * 			<td>byte[]</td>
+ * 			<td>{@link #readByteArray()}</td>
+ * 			<td>{@link #writeByteArray(byte[])}</td>
+ * 		</tr>
+ * 	</tbody>
+ * </table>
  * 
  * @version 1.0
  * @author SyntaxError404, 2020
  */
-public class Packet {
+public class Packet implements Closeable {
 	
-	private byte[]data;
-	private int pid,pointer,mode;
-	private boolean littleEndian;
+	protected byte[]data;
+	protected int pointer;
+	private int pid;
+	protected boolean littleEndian,closed;
 	
 	/**
 	 * Instantiates a new Packet
 	 * 
 	 * @param pid The Packet-ID. must be in range [0;255]
-	 * @param mode either 'w' (write) or 'r' (read). If 'w' is set, you cannot read from the Packet and vice versa.
 	 */
-	public Packet(int pid,char mode) {
+	public Packet(int pid) {
 		if(pid<0||pid>255)
 			throw new IllegalArgumentException("PacketIDs cannot be lower than 0 or greater than 255: "+pid);
 		
 		this.pid=pid;
-		this.mode=mode;
 		
-		littleEndian=false;
+		littleEndian=closed=false;
 		data=new byte[128];
 		pointer=-1;
 	}
@@ -70,13 +174,13 @@ public class Packet {
 	 * @return a single (unsigned) byte from the packet
 	 */
 	private int read() {
-		if(mode!='r')
-			throw new UnsupportedOperationException("Cannot read from Packet: Packet is write-only ");
+		if(closed)
+			throw new UnsupportedOperationException("Packet is closed");
 		
 		if(pointer<0)
 			throw new IndexOutOfBoundsException("End of data reached");
 		
-		return data[--pointer+1]&0xFF; // &0xFF to make it an 'unsigned byte'
+		return data[++pointer]&0xFF; // &0xFF to make it an 'unsigned byte'
 	}
 	/**
 	 * Reads n bytes, where n is the length of {@code bytes}
@@ -114,8 +218,8 @@ public class Packet {
 	 * @param i the byte to be written
 	 */
 	private void write(int i) {
-		if(mode!='r')
-			throw new UnsupportedOperationException("Cannot write to Packet: Packet is read-only ");
+		if(closed)
+			throw new UnsupportedOperationException("Packet is closed");
 		
 		if(++pointer>data.length) {
 			byte[]copy=new byte[data.length+128];
@@ -210,7 +314,7 @@ public class Packet {
 	/**
 	 * range: -2^63 = -9,223,372,036,854,775,808 to 2^63-1 = 9,223,372,036,854,775,807
 	 * 
-	 * @apiNote unsigned longs are not supported
+	 * <br><br><b>Note:</b>  unsigned longs are not supported
 	 * 
 	 * @return a signed (negative or positive) 64 bit = 4 byte integer (also known as int64)
 	 */
@@ -238,28 +342,28 @@ public class Packet {
 	}
 	
 	/**
-	 * range: (2 - 2^(-23)) * (-2)^127 ≈ -3.403E+38 ≈ 1.401E-45 to (2 - 2^(-23)) * 2^127 ≈ 3.403E+38<br>
+	 * range: (2 - 2^(-23)) * (-2)^127 &#8776; -3.403E+38 &#8776; 1.401E-45 to (2 - 2^(-23)) * 2^127 &#8776; 3.403E+38<br>
 	 * <br>
 	 * Space required (in bytes): 4<br>
 	 * <br>
-	 * Note: due to floats being not 100% precise, calculations like <code>8 - 6.4</code> are<br>
-	 *       actually not <code>1.6</code> as you might except, but <code>1.5999...</code><br>
-	 *       You can even try this in PHP:<br>
+	 * <b>Note:</b> due to floats being not 100% precise, calculations like <code>8 - 6.4</code> are
+	 *       actually not <code>1.6</code> as you might except, but <code>1.5999...</code>
+	 *       You can even try this in Java:<br>
 	 * <br>
-	 *       {@code $a = 8 - 6.4;}<br> 
-	 *       {@code $b = 1.6;}<br>
+	 *       {@code float a = 8 - 6.4f;}<br> 
+	 *       {@code float b = 1.6f;}<br>
 	 * <br>
-	 *       If you try this now, you will get 'bool(false)' as an output:<br>
+	 *       If you try to compare {@code a} and {@code b} now, you will get 'false' as an output:<br>
 	 * <br>
-	 *       {@code var_dump($a == $b);}<br>
+	 *       {@code System.out.println(a == b);}<br>
 	 * <br>
-	 *       In order for this comparison to acutally work, you need to round the floats:<br>
+	 *       In order for this comparison to acutally work, you need to round the floats (to 2 decimals in this example):<br>
 	 * <br>
-	 *       {@code var_dump( round($a, 2), round($b, 2));}<br> 
+	 *       {@code System.out.println((Math.round(a * 100f) / 100f) == (Math.round(b * 100f) / 100f));}<br> 
 	 * <br>
 	 *       This now prints 'bool(true)'<br>
 	 * 
-	 * @implNote this might not work on machines whose internal float-size is not 32 bit
+	 * <br><br><b>Note:</b>  this might not work on machines whose internal float-size is not 32 bit
 	 * 
 	 * @return a 32 bit = 4 byte single precision floating point number
 	 */
@@ -268,12 +372,12 @@ public class Packet {
 		return Float.intBitsToFloat((int)readUnsignedInt());
 	}
 	/**
-	 * range: (2 - 2^(-52)) * (-2)^1023 ≈ -1.798E+308 to (2 - 2^(-52)) * 2^1023 ≈ 1.798E+308<br>
+	 * range: (2 - 2^(-52)) * (-2)^1023 &#8776; -1.798E+308 to (2 - 2^(-52)) * 2^1023 &#8776; 1.798E+308<br>
 	 * <br>
 	 * Space required (in bytes): 8
 	 * 
-	 * @implNote see {@link #readFloat()} for information about precision
-	 * @implNote this might not work on machines whose internal double-size is not 64 bit
+	 * <br><br><b>Note:</b>  see {@link #readFloat()} for information about precision
+	 * <br><b>Note:</b>  this might not work on machines whose internal double-size is not 64 bit
 	 * 
 	 * @return a 64 bit = 8 byte double precision floating point number
 	 */
@@ -507,7 +611,7 @@ public class Packet {
 	}
 
 	/**
-	 * @param b the UTF-8 encoded string to be written
+	 * @param s the UTF-8 encoded string to be written
 	 * 
 	 * @see #readStringUTF8()
 	 */
@@ -541,7 +645,7 @@ public class Packet {
 		}
 	}
 	/**
-	 * @param b the ASCII string to be written
+	 * @param s the ASCII string to be written
 	 * 
 	 * @see #readStringASCII()
 	 */
@@ -574,7 +678,7 @@ public class Packet {
 			write(previous);
 	}
 	/**
-	 * @param b the ASCII string to be written
+	 * @param s the ASCII string to be written
 	 * 
 	 * @see #readStringC()
 	 */
@@ -616,17 +720,52 @@ public class Packet {
 	}
 	
 	/**
-	 * internal use only
-	 */
-	public byte[]getData() {
-		return data;
-	}
-	
-	/**
 	 * @return the Packet's size
 	 */
 	public int size() {
 		return pointer;
+	}
+	
+	/**
+	 * deletes all the {@code data} in the {@link Packet} and disables read and write access
+	 */
+	@Override
+	public void close()throws IOException {
+		closed=true;
+		data=null;
+	}
+
+	/**
+	 * validates {@code data}
+	 * 
+	 * @throws MalformedRequestException if the request is malformed
+	 */
+	protected void validate()throws MalformedRequestException {
+		int pointerPos=pointer;
+		
+		while(pointer+1<size()) {
+			int dataType=data[pointer+1];
+			
+			switch(dataType) {
+			case 0:readBoolean();break;
+			case 1:readByte();break;
+			case 2:readUnsignedByte();break;
+			case 3:readShort();break;
+			case 4:readUnsignedShort();break;
+			case 5:readInt();break;
+			case 6:readUnsignedInt();break;
+			case 7:readLong();break;
+			case 8:readFloat();break;
+			case 9:readDouble();break;
+			case 10:readStringUTF8();break;
+			case 11:readStringASCII();break;
+			case 12:readStringC();break;
+			case 13:readByteArray();break;
+			default:throw new MalformedRequestException("Invalid DataType: "+dataType);
+			}
+		}
+		
+		pointer=pointerPos;
 	}
 	
 }

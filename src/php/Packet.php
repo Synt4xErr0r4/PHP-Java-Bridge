@@ -23,7 +23,7 @@
  * @link License: https://github.com/Synt4xErr0r4/PHP-Java-Bridge/blob/master/LICENSE
  * @link GitHub Repository: https://github.com/Synt4xErr0r4/PHP-Java-Bridge/
  * @link Wiki: https://github.com/Synt4xErr0r4/PHP-Java-Bridge/wiki
- * @link JavaDocs (for /src/java): https://github.com/Synt4xErr0r4/PHP-Java-Bridge/blob/master/javadoc/
+ * @link JavaDocs (for /src/java): https://github.com/Synt4xErr0r4/PHP-Java-Bridge/blob/master/javadoc/index.html
  * 
  * @version 1.0
  * @author SyntaxError404, 2020
@@ -112,13 +112,13 @@ define('DATA_LONG',7);
  *       > $a = 8 - 6.4; 
  *       > $b = 1.6;
  * 
- *       If you try this now, you will get 'bool(false)' as an output:
+ *       If you try to compare a and b now, you will get 'bool(false)' as an output:
  * 
  *       > var_dump($a == $b);
  * 
- *       In order for this comparison to acutally work, you need to round the floats:
+ *       In order for this comparison to acutally work, you need to round the floats (to 2 decimals in this example):
  * 
- *       > var_dump( round($a, 2), round($b, 2)); 
+ *       > var_dump(round($a, 2) == round($b, 2)); 
  * 
  *       This now prints 'bool(true)'
  * 
@@ -236,15 +236,14 @@ class Packet {
      */
     private$dataTypes;
 
-    private$data,$pid,$flag;
+    private$data,$pid;
 
     /**
      * Instantiates a new Packet
      * 
      * @param pid the Packet-ID. must be in range [0;255]
-     * @param flag either 'w' (write) or 'r' (read). If 'w' is set, you cannot read from the Packet and vice versa.
      */
-    public function __construct(int $pid,string $flag='w') {
+    public function __construct(int $pid) {
         $this->dataTypes=[
             DATA_BOOL=>          ['bool',  'c',false,1,fn($x)=>is_numeric($x)||is_bool($x),                                                                              fn($x)=>intval($x)!=0?1:0],
             DATA_BYTE=>          ['int8',  'c',false,1,fn($x)=>is_numeric($x)&&-128<=$x&&$x<=127,                                                                        'intval'],
@@ -262,7 +261,6 @@ class Packet {
             warn("PacketIDs cannot be lower than 0 or greater than 255: $pid");
 
         $this->pid=$pid&0xFF; // make sure it's byte (int8)
-        $this->flag=strlen($flag)==0?'w':$flag[0];
     }
 
     /**
@@ -292,8 +290,6 @@ class Packet {
      * @param writeType internal use only
      */
     public function write(int $data_type,$data,bool $writeType=true) {
-        if($this->flag!='w')
-            throw new Exception('Cannot write to Packet: Packet is read-only');
 
         if(isset($this->dataTypes[$data_type])) {
             $args=$this->dataTypes[$data_type];
@@ -446,8 +442,6 @@ class Packet {
      * @return mixed the read data 
      */
     public function read(int $data_type,bool $readType=true) {
-        if($this->flag!='r')
-            throw new Exception('Cannot read from Packet: Packet is write-only');
 
         if($readType) {
             $type=$this->read(DATA_UNSIGNED_BYTE,false);
