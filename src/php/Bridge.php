@@ -23,7 +23,6 @@
  * @link License: https://github.com/Synt4xErr0r4/PHP-Java-Bridge/blob/master/LICENSE
  * @link GitHub Repository: https://github.com/Synt4xErr0r4/PHP-Java-Bridge/
  * @link Wiki: https://github.com/Synt4xErr0r4/PHP-Java-Bridge/wiki
- * @link JavaDocs (for /src/java): https://github.com/Synt4xErr0r4/PHP-Java-Bridge/blob/master/javadoc/index.html
  * 
  * @version 1.0
  * @author SyntaxError404, 2020
@@ -96,6 +95,19 @@ class Bridge {
 
         if($method!=BRIDGE_TCP&&$method!=BRIDGE_UDP)
             throw new Exception("Unrecognized method: $method");
+
+        $this->method=$method;
+    }
+
+    /**
+     * disconnects when destructed
+     */
+    public function __destruct() {
+        if($this->sock==null)
+            return;
+
+        $this->disconnect();
+        $this->sock=null;
     }
 
     /**
@@ -108,7 +120,10 @@ class Bridge {
 
         if($this->method==BRIDGE_TCP)
             $this->sock=fsockopen($this->hostname,$this->port,$errno,$errstr,30);
-        else$this->sock=socket_create(AF_INET,SOCK_DGRAM,0);
+        else {
+            $this->sock=socket_create(AF_INET,SOCK_DGRAM,SOL_UDP);
+            socket_connect($this->sock,$this->hostname,$this->port);
+        }
 
         if(!$this->sock)
             throw new ConnectionFailedException("Couldn't connect to server: $errstr [#$errno]");
@@ -119,7 +134,7 @@ class Bridge {
 
         if($this->method==BRIDGE_TCP)
             fclose($this->sock);
-        else socket_close($this->sock);
+        $this->sock=null;
     }
 
     /**
@@ -134,10 +149,17 @@ class Bridge {
         if(is_null($this->sock))
             throw new ConnectionNotEstablishedYetException("Not connected yet");
 
-        if($packet->size()+6>$this->maxPacketSize)
-            throw new Exception("Packets exceeds max. allowed size: ".$packet->size());
+        $raw=$packet->raw();
 
-        $message=pack('C',$packet->getPacketID()).pack('C',isLittleEndian()?1:0).pack('N',$packet->size()&0x7fffffff).$this->encrypt($packet->raw());
+        $data=$this->encrypt($raw);
+        $len=strlen($data);
+
+        if($len+6>$this->maxPacketSize)
+            throw new Exception("Packets exceeds max. allowed size: $len");
+
+        $message=pack('C',$packet->getPacketID()).pack('C',isLittleEndian()?1:0).pack('N',$len&0x7fffffff).$data;
+
+        $packet->__destruct();
 
         if($this->method==BRIDGE_TCP) {
 
@@ -145,8 +167,8 @@ class Bridge {
                 $err=error_get_last()or['type'=>0,'message'=>'null'];
                 throw new Exception("Couldn't send packet: ".$err['message']." [#".$err['type']."]");
             }
-
-            $buffer=fgets($this->sock,6);
+            
+            $buffer=fgets($this->sock,$this->maxPacketSize);
 
             if(!$buffer) {
                 $err=error_get_last()or['type'=>0,'message'=>'null'];
@@ -167,21 +189,24 @@ class Bridge {
             $response->setAndValidate($this->decrypt($buffer));
 
         } else {
+
+            if(!socket_sendto($this->sock,$message,strlen($message),0,$this->hostname,$this->port)) {
+                $errno=socket_last_error();
+                $errstr=socket_strerror($errno);
+                throw new Exception("Couldn't send packet: $errstr [#$errno]");
+            }
             
-            if(!socket_sendto($this->sock,$message,strlen($message),$this->hostname,$this->port)) {
+            if(($len=socket_recv($this->sock,$buffer,$this->maxPacketSize,0))===FALSE) {
                 $errno=socket_last_error();
                 $errstr=socket_strerror($errno);
                 throw new Exception("Couldn't send packet: $errstr [#$errno]");
             }
+            
+            $pid=unpack('C',$buffer)[1];
+            $size=unpack('N',substr($buffer,2,4))[1];
 
-            if(socket_recvfrom($this->sock,$buffer,6,MSG_WAITALL,$this->hostname,$this->port)===false) {
-                $errno=socket_last_error();
-                $errstr=socket_strerror($errno);
-                throw new Exception("Couldn't send packet: $errstr [#$errno]");
-            }
-
-            $pid=unpack('C',$buffer);
-            $size=unpack('N',substr($buffer,2,4));
+            if($len<$size+6)
+                throw new Exception("Received too few bytes: Expected at least ".($size+6).", got $len instead");
 
             $response=new Packet($pid);
             $response->setAndValidate($this->decrypt(substr($buffer,6,$size)));
@@ -198,7 +223,7 @@ class Bridge {
      */
     private function encrypt(string $plainText):string {
         if(!$this->useAES)
-            return base64_encode($plainText);
+            return base64_encode(pack('N',strlen($plainText)).$plainText);
 
         $iv=openssl_random_pseudo_bytes(16);
 
@@ -209,7 +234,8 @@ class Bridge {
 
         $aes=new Aes($this->passwd,'CBC',$iv);
         
-        return base64_encode($iv.$aes->encrypt($plainText));
+        return base64_encode($iv.$aes->encrypt(pack('N',strlen($plainText)).$plainText));
+        //return base64_encode($iv.openssl_encrypt(pack('N',strlen($plainText)).$plainText,'AES-256-CBC',$this->passwd,OPENSSL_RAW_DATA,$iv));
     }
     /**
      * @param cipherText the encrypted text
@@ -217,17 +243,28 @@ class Bridge {
      * @return string the decrypted plain text
      */
     private function decrypt(string $cipherText):string {
+        echo"<hr>decrin ".strlen($cipherText)." => ";
+        foreach(array_map(fn($x)=>unpack('c',pack('C',ord($x)))[1],str_split($cipherText))as$v)echo"$v, ";
+        echo"<hr>";
+
         $cipherText=base64_decode($cipherText);
 
         if(!$this->useAES)
-            return$cipherText;
+            return substr($cipherText,4,unpack('N',$cipherText));
         
         $iv=substr($cipherText,0,16);
         $cipherText=substr($cipherText,16);
 
         $aes=new Aes($this->passwd,'CBC',$iv);
 
-        return$aes->decrypt($cipherText);
+        $buf=$aes->decrypt($cipherText);
+        //$buf=openssl_decrypt($cipherText,'AES-256-CBC',$this->passwd,OPENSSL_RAW_DATA,$iv);
+        
+        echo"<hr>decr ".strlen($buf)." => ";
+        foreach(array_map(fn($x)=>unpack('c',pack('C',ord($x)))[1],str_split($buf))as$v)echo"$v, ";
+        echo"<hr>";
+
+        return substr($buf,4,unpack('N',$buf)[1]);
     }
 
 }

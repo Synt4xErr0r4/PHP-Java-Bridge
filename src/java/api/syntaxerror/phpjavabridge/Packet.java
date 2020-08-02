@@ -33,7 +33,6 @@ import java.io.IOException;
  * License: <a href=https://github.com/Synt4xErr0r4/PHP-Java-Bridge/blob/master/LICENSE>https://github.com/Synt4xErr0r4/PHP-Java-Bridge/blob/master/LICENSE</a><br>
  * GitHub Repository: <a href=https://github.com/Synt4xErr0r4/PHP-Java-Bridge/>https://github.com/Synt4xErr0r4/PHP-Java-Bridge/</a><br>
  * Wiki: <a href=https://github.com/Synt4xErr0r4/PHP-Java-Bridge/wiki>https://github.com/Synt4xErr0r4/PHP-Java-Bridge/wiki</a><br>
- * JavaDocs (for /src/java): <a href=https://github.com/Synt4xErr0r4/PHP-Java-Bridge/blob/master/javadoc/index.html>https://github.com/Synt4xErr0r4/PHP-Java-Bridge/blob/master/javadoc/index.html</a><br>
  * 
  * <hr>
  * 
@@ -143,7 +142,7 @@ import java.io.IOException;
 public class Packet implements Closeable {
 	
 	protected byte[]data;
-	protected int pointer;
+	protected int pointer,size;
 	private int pid;
 	protected boolean littleEndian,closed;
 	
@@ -177,7 +176,7 @@ public class Packet implements Closeable {
 		if(closed)
 			throw new UnsupportedOperationException("Packet is closed");
 		
-		if(pointer<0)
+		if(pointer>=size)
 			throw new IndexOutOfBoundsException("End of data reached");
 		
 		return data[++pointer]&0xFF; // &0xFF to make it an 'unsigned byte'
@@ -186,13 +185,13 @@ public class Packet implements Closeable {
 	 * Reads n bytes, where n is the length of {@code bytes}
 	 * 
 	 * @param bytes the array to be filled
-	 * @param rotateIfLE whether or not the array should be rotated if the system is Little Endian
+	 * @param rotateIfLE whether or not the array should be rotated if the system is Big Endian
 	 */
-	private void read(byte[]bytes,boolean rotateIfLE) {
+	private void read(byte[]bytes,boolean rotateIfBE) {
 		for(int i=0;i<bytes.length;++i)
 			bytes[i]=(byte)read();
 		
-		if(rotateIfLE&&littleEndian)
+		if(rotateIfBE&&!littleEndian)
 			for(int i=0;i<Math.floor(bytes.length/2D);++i) {
 				int j=bytes.length-i-1;
 				byte b=bytes[i];
@@ -226,6 +225,7 @@ public class Packet implements Closeable {
 			System.arraycopy(data,0,copy,0,data.length);
 			data=copy;
 		}
+		++size;
 		
 		data[pointer]=(byte)(i&0xFF);
 	}
@@ -274,7 +274,7 @@ public class Packet implements Closeable {
 		checkFlag(3);
 		byte[]bytes=new byte[2];
 		read(bytes,true);
-		return(short)((bytes[0]<<8)|bytes[1]);
+		return(short)(((bytes[0]&0xFF)<<8)|(bytes[1]&0xFF));
 	}
 	/**
 	 * range: 0 to 65,535<br>
@@ -285,8 +285,18 @@ public class Packet implements Closeable {
 	 */
 	public int readUnsignedShort() {
 		checkFlag(4);
+		return readUnsignedShort0();
+	}
+	
+	/**
+	 * internal use only<br>
+	 * <br>
+	 * @return unsigned short without {@link #checkFlag(int)} being called
+	 */
+	private int readUnsignedShort0() {
 		return(read()<<8)|read();
 	}
+	
 	/**
 	 * range: -2,147,483,648 to 2,147,483,647<br>
 	 * <br>
@@ -296,10 +306,20 @@ public class Packet implements Closeable {
 	 */
 	public int readInt() {
 		checkFlag(5);
+		return readInt0();
+	}
+	
+	/**
+	 * internal use only<br>
+	 * <br>
+	 * @return int without {@link #checkFlag(int)} being called
+	 */
+	private int readInt0() {
 		byte[]bytes=new byte[4];
 		read(bytes,true);
-		return(bytes[0]<<24)|(bytes[1]<<16)|(bytes[2]<<8)|bytes[3];
+		return((bytes[0]&0xFF)<<24)|((bytes[1]&0xFF)<<16)|((bytes[2]&0xFF)<<8)|(bytes[3]&0xFF);
 	}
+	
 	/**
 	 * range: 0 to 4,294,967,295<br>
 	 * <br>
@@ -309,8 +329,18 @@ public class Packet implements Closeable {
 	 */
 	public long readUnsignedInt() {
 		checkFlag(6);
+		return readUnsignedInt0();
+	}
+	
+	/**
+	 * internal use only<br>
+	 * <br>
+	 * @return unsigned int without {@link #checkFlag(int)} being called
+	 */
+	private long readUnsignedInt0() {
 		return((long)read()<<24)|(read()<<16)|(read()<<8)|read();
 	}
+	
 	/**
 	 * range: -2^63 = -9,223,372,036,854,775,808 to 2^63-1 = 9,223,372,036,854,775,807
 	 * 
@@ -320,25 +350,26 @@ public class Packet implements Closeable {
 	 */
 	public long readLong() {
 		checkFlag(7);
-		return readLong(true);
+		return readLong0(true);
 	}
 	
 	/**
 	 * internal use only<br>
 	 * <br>
-	 * default longs might be stored as Little Endian, but doubles aren't
+	 * default longs might be stored as Big Endian, but doubles aren't
 	 */
-	private long readLong(boolean rotateIfLE) {
+	private long readLong0(boolean rotateIfBE) {
 		byte[]bytes=new byte[8];
-		read(bytes,true);
-		return	((long)bytes[0]<<56)|
-				((long)bytes[1]<<48)|
-				((long)bytes[2]<<40)|
-				((long)bytes[3]<<32)|
-				(bytes[4]<<24)|
-				(bytes[5]<<16)|
-				(bytes[6]<<8)|
-				bytes[7];
+		read(bytes,rotateIfBE);
+		
+		return	((long)(bytes[0]&0xFF)<<56)|
+				((long)(bytes[1]&0xFF)<<48)|
+				((long)(bytes[2]&0xFF)<<40)|
+				((long)(bytes[3]&0xFF)<<32)|
+				((long)(bytes[4]&0xFF)<<24)|
+				((long)(bytes[5]&0xFF)<<16)|
+				((long)(bytes[6]&0xFF)<<8)|
+				((long)bytes[7]&0xFF);
 	}
 	
 	/**
@@ -369,7 +400,7 @@ public class Packet implements Closeable {
 	 */
 	public float readFloat() {
 		checkFlag(8);
-		return Float.intBitsToFloat((int)readUnsignedInt());
+		return Float.intBitsToFloat((int)readUnsignedInt0());
 	}
 	/**
 	 * range: (2 - 2^(-52)) * (-2)^1023 &#8776; -1.798E+308 to (2 - 2^(-52)) * 2^1023 &#8776; 1.798E+308<br>
@@ -383,7 +414,8 @@ public class Packet implements Closeable {
 	 */
 	public double readDouble() {
 		checkFlag(9);
-		return Double.longBitsToDouble(readLong(false));
+		long l=readLong0(false);
+		return Double.longBitsToDouble(l);
 	}
 	/**
 	 * Supports characters in range 0x0 - 0xFFFF (Unicode Plane 0/ Basic Multilingual Plane)<br>
@@ -398,7 +430,7 @@ public class Packet implements Closeable {
 	public String readStringUTF8() {
 		checkFlag(10);
 		
-		int len=(read()<<8)|read();
+		int len=readUnsignedShort0();
 		
 		String str="";
 		
@@ -409,10 +441,10 @@ public class Packet implements Closeable {
 				str+=(char)chr;
 			else if(chr>0xDF) {
 				i+=2;
-				str+=(char)((chr&0xF)<<12)|((chr&0x3F)<<6)|(read()&0x3F);
+				str+=(char)(((chr&0xF)<<12)|((read()&0x3F)<<6)|(read()&0x3F));
 			} else {
 				++i;
-				str+=(char)((chr&0x1F)<<6)|(read()&0x3F);
+				str+=(char)(((chr&0x1F)<<6)|(read()&0x3F));
 			}
 		}
 		
@@ -436,7 +468,7 @@ public class Packet implements Closeable {
 	public String readStringASCII() {
 		checkFlag(11);
 
-		int len=(read()<<8)|read();
+		int len=readUnsignedShort0();
 		
 		String str="";
 		int previous=0;
@@ -493,9 +525,8 @@ public class Packet implements Closeable {
 	 * @return a byte array
 	 */
 	public byte[]readByteArray() {
-		byte[]bytes=new byte[4];
-		read(bytes,true);
-		int len=(bytes[0]<<24)|(bytes[1]<<16)|(bytes[2]<<8)|bytes[3];
+		checkFlag(13);
+		int len=((int)readInt0())&0x7FFFFFFF;
 		
 		byte[]buf=new byte[len];
 		
@@ -519,7 +550,7 @@ public class Packet implements Closeable {
 	 * @see #readByte()
 	 */
 	public void writeByte(byte b) {
-		write(0);
+		write(1);
 		write(b);
 	}
 	/**
@@ -635,12 +666,12 @@ public class Packet implements Closeable {
 			if(c>0&&c<=0x7F)
 				write(c);
 			else if(c>0x7FF) {
-				write((c>>>12)&0x0F);
-				write((c>>>6)&0x3F);
-				write(c&0x3F);
+				write(((c>>>12)&0x0F)|0xE0);
+				write(((c>>>6)&0x3F)|0x80);
+				write((c&0x3F)|0x80);
 			} else {
-				write((c>>>6)&0x1F);
-				write(c&0x3F);
+				write(((c>>>6)&0x1F)|0xC0);
+				write((c&0x3F)|0x80);
 			}
 		}
 	}
@@ -723,7 +754,7 @@ public class Packet implements Closeable {
 	 * @return the Packet's size
 	 */
 	public int size() {
-		return pointer;
+		return size;
 	}
 	
 	/**
@@ -738,10 +769,13 @@ public class Packet implements Closeable {
 	/**
 	 * validates {@code data}
 	 * 
+	 * @param buf the data to be checked;
+	 * 
 	 * @throws MalformedRequestException if the request is malformed
 	 */
-	protected void validate()throws MalformedRequestException {
-		int pointerPos=pointer;
+	protected void validate(byte[]buf)throws MalformedRequestException {
+		data=buf;
+		size=buf.length;
 		
 		while(pointer+1<size()) {
 			int dataType=data[pointer+1];
@@ -765,7 +799,7 @@ public class Packet implements Closeable {
 			}
 		}
 		
-		pointer=pointerPos;
+		pointer=-1;
 	}
 	
 }

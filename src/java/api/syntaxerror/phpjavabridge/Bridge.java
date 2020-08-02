@@ -44,7 +44,6 @@ import javax.crypto.spec.SecretKeySpec;
  * License: <a href=https://github.com/Synt4xErr0r4/PHP-Java-Bridge/blob/master/LICENSE>https://github.com/Synt4xErr0r4/PHP-Java-Bridge/blob/master/LICENSE</a><br>
  * GitHub Repository: <a href=https://github.com/Synt4xErr0r4/PHP-Java-Bridge/>https://github.com/Synt4xErr0r4/PHP-Java-Bridge/</a><br>
  * Wiki: <a href=https://github.com/Synt4xErr0r4/PHP-Java-Bridge/wiki>https://github.com/Synt4xErr0r4/PHP-Java-Bridge/wiki</a><br>
- * JavaDocs (for /src/java): <a href=https://github.com/Synt4xErr0r4/PHP-Java-Bridge/blob/master/javadoc/index.html>https://github.com/Synt4xErr0r4/PHP-Java-Bridge/blob/master/javadoc/index.html</a><br>
  * 
  * @version 1.0
  * @author SyntaxError404, 2020
@@ -147,7 +146,7 @@ public abstract class Bridge {
 	}
 	
 	/**
-	 * internal use only
+	 * internal use only<br><br>
 	 * 
 	 * AES-256-CBC encryption with SHA3-256 hashed password
 	 * 
@@ -155,9 +154,21 @@ public abstract class Bridge {
 	 * 
 	 * @return the encrypted data
 	 */
-	protected final byte[]encrypt(byte[]plainText) {
+	public final byte[]encrypt(byte[]plainText) {
+		int len=plainText.length;
+		
+		byte[]raw=new byte[4+len+16-((4+len)%16)];
+		
+		raw[0]=(byte)((len>>>24)&0xFF);
+		raw[1]=(byte)((len>>>16)&0xFF);
+		raw[2]=(byte)((len>>>8)&0xFF);
+		raw[3]=(byte)(len&0xFF);
+		
+		System.arraycopy(plainText,0,raw,4,len);
+		
+		
 		if(!useAES)
-			return Base64.getEncoder().encode(plainText);
+			return Base64.getEncoder().encode(raw);
 		
 		byte[]iv=new byte[16],encrypted;
 		new SecureRandom().nextBytes(iv);
@@ -165,19 +176,20 @@ public abstract class Bridge {
 		try {
 			Cipher cipher=Cipher.getInstance("AES/CBC/NoPadding");
 			cipher.init(Cipher.ENCRYPT_MODE,new SecretKeySpec(password,"AES"),new IvParameterSpec(iv));
-			encrypted=cipher.doFinal(plainText);
+			encrypted=cipher.doFinal(raw);
 		} catch(Exception e) {
 			throw new RuntimeException(e);
 		}
 		
 		byte[]full=new byte[16+encrypted.length];
+		
 		System.arraycopy(iv,0,full,0,16);
 		System.arraycopy(encrypted,0,full,16,encrypted.length);
 		
-		return Base64.getEncoder().encode(encrypted);
+		return Base64.getEncoder().encode(full);
 	}
 	/**
-	 * internal use only
+	 * internal use only<br><br>
 	 * 
 	 * AES-256-CBC decryption with SHA3-256 hashed password
 	 * 
@@ -185,11 +197,17 @@ public abstract class Bridge {
 	 * 
 	 * @return the decrypted plain text
 	 */
-	protected final byte[]decrypt(byte[]cipherText) {
+	public final byte[]decrypt(byte[]cipherText) {
 		cipherText=Base64.getDecoder().decode(cipherText);
 		
-		if(!useAES)
-			return cipherText;
+		if(!useAES) {
+			int len=((cipherText[0]&0xFF)<<24)|
+					((cipherText[1]&0xFF)<<16)|
+					((cipherText[2]&0xFF)<<8)|
+					(cipherText[3]&0xFF);
+			
+			return Arrays.copyOfRange(cipherText,4,4+len);
+		}
 		
 		byte[]iv=Arrays.copyOf(cipherText,16);
 		cipherText=Arrays.copyOfRange(cipherText,16,cipherText.length);
@@ -197,7 +215,13 @@ public abstract class Bridge {
 		try {
 			Cipher cipher=Cipher.getInstance("AES/CBC/NoPadding");
 			cipher.init(Cipher.DECRYPT_MODE,new SecretKeySpec(password,"AES"),new IvParameterSpec(iv));
-			return cipher.doFinal(cipherText);
+			byte[]buf=cipher.doFinal(cipherText);
+			int len=((buf[0]&0xFF)<<24)|
+					((buf[1]&0xFF)<<16)|
+					((buf[2]&0xFF)<<8)|
+					(buf[3]&0xFF);
+			
+			return Arrays.copyOfRange(buf,4,4+len);
 		} catch(Exception e) {
 			throw new RuntimeException(e);
 		}

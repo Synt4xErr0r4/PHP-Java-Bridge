@@ -1,12 +1,16 @@
 package api.syntaxerror.phpjavabridge;
 
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.UncheckedIOException;
+import java.net.DatagramPacket;
+import java.net.DatagramSocket;
 import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.util.Arrays;
 
 /**
  * PHP-Java-Bridge provides a TCP- or UDP-based connection between PHP (Client) and Java (Server)<br>
@@ -38,7 +42,6 @@ import java.net.Socket;
  * License: <a href=https://github.com/Synt4xErr0r4/PHP-Java-Bridge/blob/master/LICENSE>https://github.com/Synt4xErr0r4/PHP-Java-Bridge/blob/master/LICENSE</a><br>
  * GitHub Repository: <a href=https://github.com/Synt4xErr0r4/PHP-Java-Bridge/>https://github.com/Synt4xErr0r4/PHP-Java-Bridge/</a><br>
  * Wiki: <a href=https://github.com/Synt4xErr0r4/PHP-Java-Bridge/wiki>https://github.com/Synt4xErr0r4/PHP-Java-Bridge/wiki</a><br>
- * JavaDocs (for /src/java): <a href=https://github.com/Synt4xErr0r4/PHP-Java-Bridge/blob/master/javadoc/index.html>https://github.com/Synt4xErr0r4/PHP-Java-Bridge/blob/master/javadoc/index.html</a><br>
  * 
  * <hr>
  * 
@@ -119,11 +122,10 @@ public class BridgeImpl {
 			
 			@Override
 			public void run() {
-				try {
-					InputStream in=client.getInputStream();
+				try(InputStream in=client.getInputStream();
 					OutputStream out=client.getOutputStream();
+					Packet incoming=new Packet(in.read()&0xFF)) {
 					
-					Packet incoming=new Packet(in.read()&0xFF);
 					incoming.littleEndian=in.read()!=0;
 					int length=	(in.read()>>>24)|
 								(in.read()>>>16)|
@@ -134,17 +136,53 @@ public class BridgeImpl {
 					
 					int bytesRead=in.read(buf);
 					
+					if(bytesRead+6>bridge.maxPacketLength)
+						throw new MalformedRequestException("Incoming Packet too large: "+(bytesRead+6)+" (max. "+bridge.maxPacketLength+")");
+						
 					if(bytesRead!=length)
 						throw new MalformedRequestException("Expected "+length+" bytes, got "+bytesRead+" instead");
 					
-					incoming.data=buf;
-					incoming.validate();
+					buf=bridge.decrypt(buf);
 					
+					incoming.validate(buf);
+					incoming.data=buf;
+					incoming.size=buf.length;
+					
+					PacketHandler handler=bridge.handlers.getOrDefault(incoming.getPacketID(),bridge.handlers.getOrDefault(-1,null));
+					
+					if(handler==null)
+						throw new UnsupportedOperationException("Cannot process Packet: No handler for ID #"+incoming.getPacketID()+" found");
+					
+					Packet outgoing=handler.handle(client.getRemoteSocketAddress(),incoming);
+					
+					byte[]data=bridge.encrypt(Arrays.copyOf(outgoing.data,outgoing.size()));
+					
+					out.write(outgoing.getPacketID()&0xFF);
+					out.write(0);
+					
+					if(data.length+6>bridge.maxPacketLength)
+						throw new MalformedRequestException("Outgoing Packet too large: "+(data.length+6)+" (max. "+bridge.maxPacketLength+")");
+					
+					int len=data.length;
+					
+					out.write((len>>24)&0xFF);
+					out.write((len>>16)&0xFF);
+					out.write((len>>8)&0xFF);
+					out.write(len&0xFF);
+					
+					out.write(data);
+					out.flush();
 				} catch(Exception e) {
 					if(bridge.exceptionHandler!=null)
 						bridge.exceptionHandler.uncaughtException(Thread.currentThread(),e);
 					
+					try {
+						client.close();
+					} catch(Exception e2) {}
+					
 					throw new RuntimeException(e);
+				} finally {
+					System.gc();
 				}
 			}
 			
@@ -165,6 +203,8 @@ public class BridgeImpl {
 	 */
 	public static class UDP extends Bridge {
 
+		protected DatagramSocket socket;
+		
 		/**
 		 * Instantiates a new UDP-based PHP-Java-Bridge
 		 * 
@@ -175,6 +215,118 @@ public class BridgeImpl {
 		 */
 		public UDP(int port,boolean useAES,String password,int maxPacketLength) {
 			super(port,useAES,password,maxPacketLength);
+			
+			try {
+				socket=new DatagramSocket(port,InetAddress.getLocalHost());
+			} catch(IOException e) {
+				throw new UncheckedIOException(e);
+			}
+
+			thread=new ServerThread(this);
+		}
+		
+		static class ServerThread extends Thread {
+			
+			private UDP bridge;
+			
+			public ServerThread(UDP bridge) {
+				this.bridge=bridge;
+				setName("PHP-Java [UDP] @"+bridge.socket.getLocalSocketAddress());
+			}
+			
+			public void run() {
+				while(true)
+					try {
+						System.out.println("Listening @ "+bridge.socket.getLocalSocketAddress());
+						DatagramPacket client=new DatagramPacket(new byte[bridge.maxPacketLength],bridge.maxPacketLength);
+						bridge.socket.receive(client);
+						
+						System.out.println("Client: "+client.getSocketAddress());
+						
+						new ClientHandler(bridge,client).start();
+					} catch(Exception e) {
+						e=new SocketFailureException(e);
+					}
+			}
+			
+		}
+		
+		static class ClientHandler extends Thread {
+			
+			private UDP bridge;
+			private DatagramPacket client;
+			
+			public ClientHandler(UDP bridge,DatagramPacket client) {
+				this.bridge=bridge;
+				this.client=client;
+				setName("ClientHandler PHP-Java [UDP] @"+bridge.socket.getLocalSocketAddress());
+			}
+			
+			@Override
+			public void run() {
+				try(InputStream in=new ByteArrayInputStream(client.getData());
+					Packet incoming=new Packet(in.read()&0xFF)) {
+					
+					incoming.littleEndian=in.read()!=0;
+					int length=	(in.read()>>>24)|
+								(in.read()>>>16)|
+								(in.read()>>>8)|
+								in.read();
+					
+					byte[]buf=new byte[length];
+					
+					int bytesRead=in.read(buf);
+					
+					if(bytesRead+6>bridge.maxPacketLength)
+						throw new MalformedRequestException("Incoming Packet too large: "+(bytesRead+6)+" (max. "+bridge.maxPacketLength+")");
+						
+					if(bytesRead!=length)
+						throw new MalformedRequestException("Expected "+length+" bytes, got "+bytesRead+" instead");
+					
+					buf=bridge.decrypt(buf);
+					
+					incoming.validate(buf);
+					incoming.data=buf;
+					incoming.size=buf.length;
+					
+					PacketHandler handler=bridge.handlers.getOrDefault(incoming.getPacketID(),bridge.handlers.getOrDefault(-1,null));
+					
+					if(handler==null)
+						throw new UnsupportedOperationException("Cannot process Packet: No handler for ID #"+incoming.getPacketID()+" found");
+					
+					Packet outgoing=handler.handle(client.getSocketAddress(),incoming);
+					
+					byte[]data=bridge.encrypt(Arrays.copyOf(outgoing.data,outgoing.size()));
+					
+					int len=data.length;
+					
+					if(data.length+6>bridge.maxPacketLength)
+						throw new MalformedRequestException("Outgoing Packet too large: "+(data.length+6)+" (max. "+bridge.maxPacketLength+")");
+					
+					byte[]finalData=new byte[len+6];
+					
+					finalData[0]=(byte)(outgoing.getPacketID()&0xFF);
+					
+					finalData[2]=(byte)((len>>24)&0xFF);
+					finalData[3]=(byte)((len>>16)&0xFF);
+					finalData[4]=(byte)((len>>8)&0xFF);
+					finalData[5]=(byte)(len&0xFF);
+					
+					System.arraycopy(data,0,finalData,6,len);
+					data=null;
+					
+					DatagramPacket packet=new DatagramPacket(finalData,finalData.length,client.getSocketAddress());
+					bridge.socket.send(packet);
+				} catch(Exception e) {
+					if(bridge.exceptionHandler!=null)
+						bridge.exceptionHandler.uncaughtException(Thread.currentThread(),e);
+					
+					throw new RuntimeException(e);
+				} finally {
+					System.gc();
+				}
+			}
+			
 		}
 		
 	}

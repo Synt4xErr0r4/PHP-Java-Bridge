@@ -23,7 +23,6 @@
  * @link License: https://github.com/Synt4xErr0r4/PHP-Java-Bridge/blob/master/LICENSE
  * @link GitHub Repository: https://github.com/Synt4xErr0r4/PHP-Java-Bridge/
  * @link Wiki: https://github.com/Synt4xErr0r4/PHP-Java-Bridge/wiki
- * @link JavaDocs (for /src/java): https://github.com/Synt4xErr0r4/PHP-Java-Bridge/blob/master/javadoc/index.html
  * 
  * @version 1.0
  * @author SyntaxError404, 2020
@@ -226,7 +225,7 @@ class Packet {
      * ID => [
      *     string: name,
      *     string: format character,
-     *     bool: whether or not strrev(string) is required (for unpack(string,string)) if system is Little Endian,
+     *     bool: whether or not strrev(string) is required (for unpack(string,string)) if system is Big Endian,
      *     int: byte size,
      *     callable: function to check if type is correct,
      *     callable: ensures correct type
@@ -261,6 +260,14 @@ class Packet {
             warn("PacketIDs cannot be lower than 0 or greater than 255: $pid");
 
         $this->pid=$pid&0xFF; // make sure it's byte (int8)
+    }
+
+    /**
+     * clears buffer when destructed
+     */
+    public function __destruct() {
+        $this->data=null;
+        $this->dataTypes=null;
     }
 
     /**
@@ -400,11 +407,11 @@ class Packet {
      * 
      * @param fmt the type of data. See https://www.php.net/manual/en/function.pack
      * @param len the length of the data
-     * @param strrevLE whether or not the data should be reversed if the system is Little Endian
+     * @param strrevBE whether or not the data should be reversed if the system is Big Endian
      * 
      * @return mixed the read data (either int or float)
      */
-    private function read0(string $fmt,int $len,bool $strrevLE=false) {
+    private function read0(string $fmt,int $len,bool $strrevBE=false) {
         if(strlen($fmt)!=1)
             throw new Exception('can only unpack one type at a time, got '.strlen($fmt).' instead.');
 
@@ -413,7 +420,7 @@ class Packet {
         if(strlen($this->data)-$len<0)
             throw new IndexOutOfBoundsException("Too few data left: need $len, ".strlen($this->data)." left");
 
-        $data=unpack($fmt,isLittleEndian()&&$strrevLE?strrev($unpack):$unpack)[1];
+        $data=unpack($fmt,!isLittleEndian()&&$strrevBE?strrev($unpack):$unpack)[1];
 
         $this->data=substr($this->data,$len);
 
@@ -463,8 +470,32 @@ class Packet {
 
             $str='';
 
-            for($i=0;$i<$len;++$i)
-                $str.=chr($this->read(DATA_UNSIGNED_BYTE,false));
+            for($i=0;$i<$len;++$i) {
+                $ord=$this->read(DATA_UNSIGNED_BYTE,false);
+
+                if($ord<0x7F)
+                    $str.=chr($ord);
+                elseif($ord>0xDF) {
+                    $i+=2;
+
+                    if($i>=$len)
+                        throw new Exception("Malformed UTF-8 string: missing bytes");
+
+                    $ord1=$this->read(DATA_UNSIGNED_BYTE,false);
+                    $ord2=$this->read(DATA_UNSIGNED_BYTE,false);
+
+                    $str.=mb_chr((($ord&0x0F)<<12)|(($ord1&0x3F)<<6)|($ord2&0x3F));
+                } else {
+                    ++$i;
+
+                    if($i>=$len)
+                        throw new Exception("Malformed UTF-8 string: missing bytes");
+
+                    $ord1=$this->read(DATA_UNSIGNED_BYTE,false);
+
+                    $str.=mb_chr((($ord&0x1F)<<6)|($ord1&0x3F));
+                }
+            }
 
             return$str;
         case DATA_STRING_ASCII:
@@ -587,12 +618,14 @@ class Packet {
      * internal use only
      */
     public function setAndValidate(string $new) {
-        $this->data=clone$new;
+        $this->data=$new;
 
-        while(strlen($this->data)>0) {
-            $type=unpack('C',$this->data);
-            $this->read($type);
-        }
+        echo"<hr>final ".strlen($new)." => ";
+        foreach(array_map(fn($x)=>unpack('c',pack('C',ord($x)))[1],str_split($new))as$v)echo"$v, ";
+        echo"<hr>";
+
+        while(strlen($this->data)>0)
+            $this->read(unpack('C',$this->data)[1]);
 
         $this->data=$new;
     }

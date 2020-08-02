@@ -23,7 +23,6 @@
  * @link License: https://github.com/Synt4xErr0r4/PHP-Java-Bridge/blob/master/LICENSE
  * @link GitHub Repository: https://github.com/Synt4xErr0r4/PHP-Java-Bridge/
  * @link Wiki: https://github.com/Synt4xErr0r4/PHP-Java-Bridge/wiki
- * @link JavaDocs (for /src/java): https://github.com/Synt4xErr0r4/PHP-Java-Bridge/blob/master/javadoc/index.html
  * 
  * @version 1.0
  * @author SyntaxError404, 2020
@@ -41,12 +40,12 @@ $bridge->connect();
 $request = new Packet(37);
 
 $request->write(DATA_STRING_UTF8, "Hello World!");
-$request->write(DATA_INT, 12345);
 
 $response = $bridge->sendPacket($request);
 
 echo "Answer: " . $response->read(DATA_STRING_UTF8);
 
 $bridge->disconnect();
+$response->__destruct();
 
 ?>

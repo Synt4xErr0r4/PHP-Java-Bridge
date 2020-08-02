@@ -1,3 +1,5 @@
+package test;
+
 import api.syntaxerror.phpjavabridge.*;
 
 public class Server implements PacketHandler {
@@ -15,7 +17,6 @@ public class Server implements PacketHandler {
     @Override
     public Packet handle(Packet incoming) {
         System.out.println(incoming.readStringUTF8());
-        System.out.println(incoming.readInt());
 
         Packet outgoing = new Packet(38);
 
