@@ -119,21 +119,23 @@ class Bridge {
             throw new ConnectionAlreadyEstablishedException("Already connected");
 
         if($this->method==BRIDGE_TCP)
-            $this->sock=fsockopen($this->hostname,$this->port,$errno,$errstr,30);
-        else {
-            $this->sock=socket_create(AF_INET,SOCK_DGRAM,SOL_UDP);
-            socket_connect($this->sock,$this->hostname,$this->port);
-        }
+            $this->sock=socket_create(AF_INET,SOCK_STREAM,SOL_TCP);
+        else$this->sock=socket_create(AF_INET,SOCK_DGRAM,SOL_UDP);
 
-        if(!$this->sock)
+        socket_connect($this->sock,$this->hostname,$this->port);
+
+        if(!$this->sock) {
+            $errno=socket_last_error();
+            $errstr=socket_strerror($errno);
             throw new ConnectionFailedException("Couldn't connect to server: $errstr [#$errno]");
+        }
     }
     public function disconnect() {
         if(is_null($this->sock))
             throw new ConnectionNotEstablishedYetException("Not connected yet");
 
         if($this->method==BRIDGE_TCP)
-            fclose($this->sock);
+            socket_close($this->sock);
         $this->sock=null;
     }
 
@@ -160,58 +162,27 @@ class Bridge {
         $message=pack('C',$packet->getPacketID()).pack('C',isLittleEndian()?1:0).pack('N',$len&0x7fffffff).$data;
 
         $packet->__destruct();
-
-        if($this->method==BRIDGE_TCP) {
-
-            if(fwrite($this->sock,$message,strlen($message))===false) {
-                $err=error_get_last()or['type'=>0,'message'=>'null'];
-                throw new Exception("Couldn't send packet: ".$err['message']." [#".$err['type']."]");
-            }
-            
-            $buffer=fgets($this->sock,$this->maxPacketSize);
-
-            if(!$buffer) {
-                $err=error_get_last()or['type'=>0,'message'=>'null'];
-                throw new Exception("Couldn't read packet: ".$err['message']." [#".$err['type']."]");
-            }
-
-            $pid=unpack('C',$buffer);
-            $size=unpack('N',substr($buffer,2,4));
-
-            $buffer=fgets($this->sock,$size);
-            
-            if(!$buffer) {
-                $err=error_get_last()or['type'=>0,'message'=>'null'];
-                throw new Exception("Couldn't read packet: ".$err['message']." [#".$err['type']."]");
-            }
-
-            $response=new Packet($pid);
-            $response->setAndValidate($this->decrypt($buffer));
-
-        } else {
-
-            if(!socket_sendto($this->sock,$message,strlen($message),0,$this->hostname,$this->port)) {
-                $errno=socket_last_error();
-                $errstr=socket_strerror($errno);
-                throw new Exception("Couldn't send packet: $errstr [#$errno]");
-            }
-            
-            if(($len=socket_recv($this->sock,$buffer,$this->maxPacketSize,0))===FALSE) {
-                $errno=socket_last_error();
-                $errstr=socket_strerror($errno);
-                throw new Exception("Couldn't send packet: $errstr [#$errno]");
-            }
-            
-            $pid=unpack('C',$buffer)[1];
-            $size=unpack('N',substr($buffer,2,4))[1];
-
-            if($len<$size+6)
-                throw new Exception("Received too few bytes: Expected at least ".($size+6).", got $len instead");
-
-            $response=new Packet($pid);
-            $response->setAndValidate($this->decrypt(substr($buffer,6,$size)));
-
+        
+        if(!socket_sendto($this->sock,$message,strlen($message),0,$this->hostname,$this->port)) {
+            $errno=socket_last_error();
+            $errstr=socket_strerror($errno);
+            throw new Exception("Couldn't send packet: $errstr [#$errno]");
         }
+        
+        if(($len=socket_recv($this->sock,$buffer,$this->maxPacketSize,$this->method==BRIDGE_UDP?0:MSG_WAITALL))===FALSE) {
+            $errno=socket_last_error();
+            $errstr=socket_strerror($errno);
+            throw new Exception("Couldn't send packet: $errstr [#$errno]");
+        }
+
+        $pid=unpack('C',$buffer)[1];
+        $size=unpack('N',substr($buffer,2,4))[1];
+
+        if($len<$size+6)
+            throw new Exception("Received too few bytes: Expected at least ".($size+6).", got $len instead");
+
+        $response=new Packet($pid);
+        $response->setAndValidate($this->decrypt(substr($buffer,6,$size)));
 
         return$response;
     }
